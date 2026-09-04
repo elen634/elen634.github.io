@@ -3,53 +3,34 @@
 港南3丁目の朝と帰りのための一枚ダッシュボード。
 天気・品川駅まわりの運行状況・専用シャトルバスの発車案内をまとめて表示します。
 
-ビルド不要・APIキー不要の静的サイトです。`dashboard/index.html` を開くだけで動きます。
+ビルド不要・APIキー不要の静的サイトです。`index.html` を開くだけで動きます。
 
 ## 構成
 
 ```
-index.html, stylesheet.css, top.png   ← 以前からある Progate の練習ページ（GitHub Pages のルート）
-dashboard/                            ← このダッシュボード。Vercel の配信ルート
-vercel.json                           ← dashboard/ をルートとして配信する設定
+index.html, assets/   ← このダッシュボード（リポジトリのルート）
+progate/              ← 以前からある Progate の練習ページ
+vercel.json           ← 検索避けヘッダのみ
 ```
 
-- GitHub Pages: https://elen634.github.io/ = Progate ページ、`/dashboard/` = ダッシュボード
-- Vercel: https://livio-dashboard.vercel.app = ダッシュボード（プロジェクト設定の **Root Directory を `dashboard`** にしている）
+ダッシュボードをルートに置いているので、GitHub Pages も Vercel も
+追加設定なしでそのまま配信できます。
+
+- GitHub Pages: https://elen634.github.io/ = ダッシュボード、`/progate/` = Progate
+- Vercel: https://livio-dashboard.vercel.app = ダッシュボード
 
 ## Vercel で公開する
 
-1. https://vercel.com/new を開く（GitHub アカウントでログイン）
+1. https://vercel.com/new を開く
 2. `elen634/elen634.github.io` を **Import**
-3. **Root Directory** を `dashboard` にする（ここだけ必ず変更）
-4. Project Name を `livio-dashboard` にして **Deploy**
-4. Project Settings → General → Project Name を `livio-dashboard` にする
-   （`.vercel.app` のサブドメインがこの名前になります）
+3. Project Name を `livio-dashboard` にして **Deploy**
 
-Root Directory を設定すると Vercel は `dashboard/` の中だけを見るため、
-`vercel.json` もその中に置いています。
-
-`vercel.json` の `rewrites` で `/` をダッシュボードに向ける方法は使えません。
-Vercel は rewrites を適用する前に実ファイルを探すため、ルートの `index.html`
-（Progate）が先に配信されてしまいます。
-
-## 表示するもの
-
-| ブロック | 内容 | データ元 |
-|---|---|---|
-| 時計・モード | 東京時刻、時間帯（朝の移動 / 日中 / 帰宅 / 夜） | ブラウザ |
-| 天気 | 気温・体感・降水確率・雨量・風速・UV、2時間ごとの予報 | [Open-Meteo](https://open-meteo.com/)（キー不要） |
-| 自転車 | 行き／帰りそれぞれの 推奨・注意・非推奨 | 上の天気から判定 |
-| 駅コンディション | 品川駅に乗り入れる路線の遅延、混雑リスク（**推定**） | [鉄道遅延情報のjson](https://tetsudo.rti-giken.jp/free/delay.json) |
-| シャトルバス | 次の発車までの分数・時刻表 | 管理規約 別添2 の時刻表（同梱） |
-| 近隣バス | 都営バス品99 / ちぃばす | 時刻表を入れると発車案内になります（下記） |
-| バイクシェア | 近くのポートの空き | 公共交通オープンデータセンターの GBFS |
-
-取得できなかったデータはその部分だけ「取得できず」になり、ほかの表示は生きたままです。
-右上の「実データ n/m」で、いくつ取れているかが分かります。
+**Root Directory と Output Directory は空のまま（既定のまま）にしてください。**
+ダッシュボードがリポジトリのルートにあるので、変更すると逆に動きません。
 
 ## 設定
 
-さわるのは **`dashboard/assets/data.js`** だけです。
+さわるのは **`assets/data.js`** だけです。
 
 ### 位置を正確にする
 
@@ -109,14 +90,14 @@ python3 -m http.server 8000   # → http://localhost:8000
 ## 注意
 
 - 混雑リスクは、遅延の本数・通勤ピーク・雨から出した**推定**で、実測値ではありません。
-- シャトルの時刻は配布資料の書き起こしです。ダイヤ改正時は `dashboard/assets/data.js` を更新してください。
+- シャトルの時刻は配布資料の書き起こしです。ダイヤ改正時は `assets/data.js` を更新してください。
 - おでかけ前に公式の運行情報もあわせてご確認ください。
 
 ## 検索避けについて
 
 居住者専用のシャトル時刻表を含むため、検索エンジンに載らないようにしています。
 
-- `dashboard/index.html` の `<meta name="robots">`
+- `index.html` の `<meta name="robots">`
 - `vercel.json` の `X-Robots-Tag` ヘッダ
 
 どちらも消せば通常どおりインデックスされます。なお、どちらの URL も

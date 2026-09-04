@@ -60,6 +60,12 @@ window.DASHBOARD_CONFIG = {
   },
 };
 
+/* 祝日（YYYY-MM-DD）。ここに入れた日は holiday ダイヤで表示します。
+   空のあいだ、祝日は平日ダイヤ扱いになります。 */
+window.HOLIDAYS = [
+  // '2026-10-12', // スポーツの日
+];
+
 /* ==========================================================================
    専用シャトルバス時刻表
    出典: 管理規約 別添2「リビオタワー品川発 / 品川駅港南口発」時刻表
@@ -119,8 +125,14 @@ window.SHUTTLE = {
 
 /* ==========================================================================
    近隣の路線バス
-   時刻表を手に入れたら table に入れてください（シャトルと同じ形式）。
-   table が null のあいだは、公式時刻表へのリンクだけを表示します。
+
+   table は次のどちらの形でも書けます。
+
+     { 7: [2, 18], 8: [4, 20] }                        … 毎日同じダイヤ
+     { weekday: {...}, saturday: {...}, holiday: {...} } … 曜日別
+                                                          （バスは基本こちら）
+
+   null のあいだは、公式時刻表へのリンクだけを表示します。
    ========================================================================== */
 
 window.LOCAL_BUSES = [
@@ -129,17 +141,22 @@ window.LOCAL_BUSES = [
     badge: '都営',
     accent: '#2f7d5a',
     from: '港南中学校前',
-    to: '品川駅',
-    url: 'https://tobus.jp/sp/blsys/navi',
+    to: '品川駅港南口',
+    /* 品99 は 品川駅港南口 ⇄ 品川埠頭。下は 港南中学校前 → 品川駅港南口 の時刻表。
+       公式は都バス運行情報サービス（tobus.jp）でも確認できます。 */
+    url: 'https://www.navitime.co.jp/bus/diagram/timelist?departure=00016828&arrival=00016924&line=00004136',
     table: null,
   },
   {
     name: '港区コミュニティバス・ちぃばす',
-    badge: '港区',
+    badge: '芝浦港南ルート',
     accent: '#2b6ea3',
     from: '浜路橋',
-    to: '品川駅',
-    url: 'https://www.city.minato.tokyo.jp/kotsuanzen/shisetsu/kotsu/chiibus/index.html',
+    to: '品川駅港南口',
+    /* 芝浦港南ルートは 田町駅東口 ⇄ 品川駅港南口。運行はフジエクスプレス。
+       時刻表の CSV が東京都オープンデータカタログにあります:
+       https://catalog.data.metro.tokyo.lg.jp/dataset/t131032d0000000054 */
+    url: 'https://www.fujiexpress.co.jp/chiibus/timetable/',
     table: null,
   },
 ];

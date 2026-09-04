@@ -392,6 +392,32 @@
   }
 
   /* ================= バス ================= */
+  /* table は「毎日同一」か「曜日別」のどちらか。今日ぶんを取り出す。
+     祝日は window.HOLIDAYS に載っている日だけ holiday 扱い。 */
+  var DAYKEYS = ['weekday', 'saturday', 'holiday'];
+
+  function isDayTyped(table) {
+    return !!table && DAYKEYS.some(function (k) { return table[k]; });
+  }
+
+  function tableFor(table, t) {
+    if (!isDayTyped(table)) return table;
+    var holiday = t.dow === 0 || (window.HOLIDAYS || []).indexOf(t.iso) >= 0;
+    var order = holiday ? ['holiday', 'saturday', 'weekday']
+      : t.dow === 6 ? ['saturday', 'holiday', 'weekday']
+      : ['weekday'];
+    for (var i = 0; i < order.length; i++) {
+      if (table[order[i]]) return table[order[i]];
+    }
+    return null;
+  }
+
+  function dayLabel(table, t) {
+    if (!isDayTyped(table)) return '';
+    var holiday = t.dow === 0 || (window.HOLIDAYS || []).indexOf(t.iso) >= 0;
+    return holiday ? '休日ダイヤ' : t.dow === 6 ? '土曜ダイヤ' : '平日ダイヤ';
+  }
+
   /* table: { 時: [分, …] } から、いまより後の発車を count 件返す（翌日へ繰り越し） */
   function nextDepartures(table, t, count) {
     var slots = [];
@@ -420,12 +446,15 @@
     var card = el('article', 'route');
     if (opts.accent) card.style.setProperty('--accent', opts.accent);
 
+    var today = tableFor(opts.table, t);
+    var dayNote = dayLabel(opts.table, t);
+
     var head = el('div', 'route-head');
     head.appendChild(el('div', 'route-badge', opts.name));
-    if (opts.badge) {
+    if (opts.badge || dayNote) {
       var b = el('div', 'route-badge');
       b.appendChild(el('i', 'dot dot-ok'));
-      b.appendChild(document.createTextNode(opts.badge));
+      b.appendChild(document.createTextNode([opts.badge, dayNote].filter(Boolean).join(' · ')));
       head.appendChild(b);
     }
     card.appendChild(head);
@@ -433,7 +462,7 @@
     if (opts.dirs) card.appendChild(opts.dirs);
     card.appendChild(el('div', 'route-title', opts.from + ' → ' + opts.to));
 
-    if (!opts.table) {
+    if (!today) {
       var empty = el('div', 'route-empty');
       empty.appendChild(el('b', null, '時刻表 未登録'));
       empty.appendChild(document.createTextNode('assets/data.js の table に時刻を入れると、ここに発車案内が出ます。'));
@@ -449,7 +478,7 @@
       return card;
     }
 
-    var deps = nextDepartures(opts.table, t, 3);
+    var deps = nextDepartures(today, t, 3);
     var body = el('div', 'route-body');
 
     if (!deps.length) {
@@ -538,15 +567,17 @@
     body.innerHTML = '';
 
     (m.directions || []).forEach(function (d) {
-      if (!d.table) return;
+      var src = tableFor(d.table, t);
+      if (!src) return;
       var table = el('table', 'tt');
-      var cap = el('caption', null, d.from + ' → ' + d.to);
+      var note = dayLabel(d.table, t);
+      var cap = el('caption', null, d.from + ' → ' + d.to + (note ? '（' + note + '）' : ''));
       table.appendChild(cap);
-      Object.keys(d.table).map(Number).sort(function (a, b) { return a - b; }).forEach(function (h) {
+      Object.keys(src).map(Number).sort(function (a, b) { return a - b; }).forEach(function (h) {
         var tr = el('tr');
         tr.appendChild(el('th', null, h + '時'));
         var td = el('td');
-        d.table[h].forEach(function (mi, k) {
+        src[h].forEach(function (mi, k) {
           if (k) td.appendChild(document.createTextNode('　'));
           var isNow = (h === t.hh && h * 60 + mi >= t.minutes);
           var s = el('span', isNow ? 'mnow' : null, pad(mi));

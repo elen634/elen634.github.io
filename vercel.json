@@ -1,10 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": "dashboard/ を配信ルートにする。これで Vercel 側の Root Directory 設定は不要。",
   "outputDirectory": "dashboard",
-
-  "//headers": "居住者専用のシャトル時刻表を含むため検索避け。公開してよければ headers ごと削除。",
   "headers": [
     {
       "source": "/(.*)",

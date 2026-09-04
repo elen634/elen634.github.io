@@ -14,19 +14,21 @@ vercel.json                           ← dashboard/ をルートとして配信
 ```
 
 - GitHub Pages: https://elen634.github.io/ = Progate ページ、`/dashboard/` = ダッシュボード
-- Vercel: https://livio-dashboard.vercel.app = ダッシュボード（`vercel.json` の `outputDirectory` で `dashboard/` を配信ルートに指定）
+- Vercel: https://livio-dashboard.vercel.app = ダッシュボード（`vercel.json` の `rewrites` で `/` を `dashboard/index.html` に向けている）
 
 ## Vercel で公開する
 
 1. https://vercel.com/new を開く（GitHub アカウントでログイン）
 2. `elen634/elen634.github.io` を **Import**
 3. 設定はすべて既定のままで **Deploy**
-   （`vercel.json` が `dashboard/` を配信ルートに指定しているので、Root Directory の変更は不要）
+   （Root Directory も Output Directory も触らないこと。`vercel.json` の
+   `rewrites` が `/` を `dashboard/index.html` に向けます）
 4. Project Settings → General → Project Name を `livio-dashboard` にする
    （`.vercel.app` のサブドメインがこの名前になります）
 
-もし Progate のページが表示されてしまった場合は、Project Settings → General →
-**Root Directory** を `dashboard` にして再デプロイしてください。
+`dashboard/index.html` はアセットを `/dashboard/assets/...` の絶対パスで参照しています。
+GitHub Pages（`/dashboard/`）と Vercel（rewrite 後の `/`）のどちらでも同じパスで
+解決できるようにするためなので、相対パスに戻さないでください。
 
 ## 表示するもの
 

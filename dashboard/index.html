@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>リビオタワー品川 ダッシュボード</title>
+<meta name="description" content="港南3丁目の天気・品川駅の運行状況・専用シャトルバスの発車案内をまとめたダッシュボード。">
+<!-- 居住者専用のシャトル時刻表を載せているため検索避け。公開してよければこの行を消す -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f3f2ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141416" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚌</text></svg>">
+</head>
+<body>
+
+<div id="mock-banner" class="mock-banner" hidden>モックデータを表示中（?mock=1）— 実際の値ではありません</div>
+
+<main class="wrap">
+
+  <header class="topbar">
+    <div class="now">
+      <div class="clock" id="clock">--:--</div>
+      <div class="now-meta">
+        <div class="now-date" id="date">—</div>
+        <div class="now-place" id="place">—</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="pill" id="data-pill"><i class="dot dot-idle"></i><span id="data-pill-text">読み込み中</span></span>
+      <span class="pill" id="mode-pill"><i class="dot dot-mode"></i><span id="mode-pill-text">—</span></span>
+    </div>
+  </header>
+
+  <div id="alert-slot"></div>
+
+  <!-- 天気 -->
+  <section class="card weather-card" id="weather-card" aria-labelledby="weather-h">
+    <h2 class="sr-only" id="weather-h">天気</h2>
+    <div class="weather-grid">
+
+      <div class="wx-now">
+        <div class="wx-icon" id="wx-icon"></div>
+        <div>
+          <div class="label">現在の天気</div>
+          <div class="temp-row">
+            <span class="temp" id="wx-temp">--</span><span class="deg">°</span>
+          </div>
+          <div class="sub" id="wx-desc">—</div>
+          <div class="chip" id="wx-uv" hidden></div>
+        </div>
+      </div>
+
+      <div class="wx-metric">
+        <div class="metric-head"><i class="ico ico-rain" id="pop-ico"></i><span class="label">降水確率</span></div>
+        <div class="metric-value"><span id="wx-pop">--</span><span class="unit">%</span></div>
+        <div class="sub" id="wx-mm">—</div>
+      </div>
+
+      <div class="wx-metric">
+        <div class="metric-head"><i class="ico ico-wind"></i><span class="label">風速</span></div>
+        <div class="metric-value"><span id="wx-wind">--</span><span class="unit">m/s</span></div>
+        <div class="sub" id="wx-gust">—</div>
+      </div>
+
+      <div class="wx-hourly">
+        <div class="hourly-head">
+          <div>
+            <div class="label" id="hourly-place">—</div>
+            <div class="h-title">2時間ごとの空模様</div>
+          </div>
+          <div class="label">降水量 mm/h</div>
+        </div>
+        <div class="hourly-scroll"><div class="hourly" id="hourly"></div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 自転車 + 駅コンディション -->
+  <div class="split">
+    <section class="card bike-card" id="bike-card" aria-labelledby="bike-h">
+      <h2 class="sr-only" id="bike-h">自転車</h2>
+      <div class="bike-top">
+        <span class="tag" id="bike-tag">自転車</span>
+        <span class="label" id="bike-when">今日の自転車</span>
+      </div>
+      <div class="bike-verdict"><span class="bike-mark" id="bike-mark"></span><span id="bike-word">—</span></div>
+      <p class="bike-reason" id="bike-reason">判定中…</p>
+      <div class="bike-legs" id="bike-legs"></div>
+    </section>
+
+    <section class="card station-card" aria-labelledby="station-h">
+      <h2 class="sr-only" id="station-h">駅コンディション</h2>
+      <div class="station-grid">
+        <div class="station-left">
+          <div class="label">駅コンディション</div>
+          <div class="station-name"><i class="dot" id="station-dot"></i>品川駅 <b id="station-state">—</b></div>
+          <p class="sub" id="station-note">—</p>
+        </div>
+        <div class="station-lines" id="station-lines"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- バス -->
+  <section class="routes" id="routes" aria-label="バス発車案内"></section>
+
+  <!-- バイクシェア -->
+  <section class="card share-card" id="share-card" hidden aria-labelledby="share-h">
+    <div class="share-head">
+      <div>
+        <div class="label">ドコモ・バイクシェア</div>
+        <h2 class="h-title" id="share-h">近くのポート</h2>
+      </div>
+      <div class="label" id="share-updated"></div>
+    </div>
+    <div class="ports" id="ports"></div>
+  </section>
+
+  <footer class="foot">
+    <p id="sources">—</p>
+    <p class="foot-note">
+      天気は Open-Meteo、運行情報は「鉄道遅延情報のjson」、バイクシェアは 公共交通オープンデータセンター の GBFS。
+      混雑リスクは取得できた情報からの<b>推定</b>で、実測値ではありません。
+      シャトルバスの時刻は管理規約 別添2 の時刻表をそのまま収録しています（<span id="shuttle-note"></span>）。
+      おでかけ前に公式の運行情報もあわせてご確認ください。
+    </p>
+  </footer>
+
+</main>
+
+<!-- 時刻表モーダル -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head">
+      <h2 id="modal-title">時刻表</h2>
+      <button class="modal-close" type="button" data-close aria-label="閉じる">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

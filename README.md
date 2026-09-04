@@ -3,7 +3,29 @@
 港南3丁目の朝と帰りのための一枚ダッシュボード。
 天気・品川駅まわりの運行状況・専用シャトルバスの発車案内をまとめて表示します。
 
-ビルド不要・APIキー不要の静的サイトです。`index.html` を開くだけで動きます。
+ビルド不要・APIキー不要の静的サイトです。`dashboard/index.html` を開くだけで動きます。
+
+## 構成
+
+```
+index.html, stylesheet.css, top.png   ← 以前からある Progate の練習ページ（GitHub Pages のルート）
+dashboard/                            ← このダッシュボード。Vercel の配信ルート
+vercel.json                           ← dashboard/ をルートとして配信する設定
+```
+
+- GitHub Pages: https://elen634.github.io/ = Progate ページ、`/dashboard/` = ダッシュボード
+- Vercel: ルート `/` = ダッシュボード（`vercel.json` の `outputDirectory` による）
+
+## Vercel で公開する
+
+1. https://vercel.com/new を開く（GitHub アカウントでログイン）
+2. `elen634/elen634.github.io` を **Import**
+3. 設定はすべて既定のままで **Deploy**
+   （`vercel.json` が `dashboard/` を配信ルートに指定しているので、Root Directory の変更は不要）
+4. Project Settings → Domains で好きなサブドメイン名に変更できる
+
+もし Progate のページが表示されてしまった場合は、Project Settings → General →
+**Root Directory** を `dashboard` にして再デプロイしてください。
 
 ## 表示するもの
 
@@ -22,7 +44,7 @@
 
 ## 設定
 
-さわるのは **`assets/data.js`** だけです。
+さわるのは **`dashboard/assets/data.js`** だけです。
 
 ### 位置を正確にする
 
@@ -66,7 +88,15 @@ python3 -m http.server 8000   # → http://localhost:8000
 ## 注意
 
 - 混雑リスクは、遅延の本数・通勤ピーク・雨から出した**推定**で、実測値ではありません。
-- シャトルの時刻は配布資料の書き起こしです。ダイヤ改正時は `assets/data.js` を更新してください。
+- シャトルの時刻は配布資料の書き起こしです。ダイヤ改正時は `dashboard/assets/data.js` を更新してください。
 - おでかけ前に公式の運行情報もあわせてご確認ください。
 
-`progate/` には、以前ここにあった Progate の練習ページを残してあります。
+## 検索避けについて
+
+居住者専用のシャトル時刻表を含むため、検索エンジンに載らないようにしています。
+
+- `dashboard/index.html` の `<meta name="robots">`
+- `vercel.json` の `X-Robots-Tag` ヘッダ
+
+どちらも消せば通常どおりインデックスされます。なお、どちらの URL も
+知っている人は誰でも開ける状態です（認証はかかっていません）。

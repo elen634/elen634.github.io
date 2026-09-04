@@ -14,21 +14,23 @@ vercel.json                           ← dashboard/ をルートとして配信
 ```
 
 - GitHub Pages: https://elen634.github.io/ = Progate ページ、`/dashboard/` = ダッシュボード
-- Vercel: https://livio-dashboard.vercel.app = ダッシュボード（`vercel.json` の `rewrites` で `/` を `dashboard/index.html` に向けている）
+- Vercel: https://livio-dashboard.vercel.app = ダッシュボード（プロジェクト設定の **Root Directory を `dashboard`** にしている）
 
 ## Vercel で公開する
 
 1. https://vercel.com/new を開く（GitHub アカウントでログイン）
 2. `elen634/elen634.github.io` を **Import**
-3. 設定はすべて既定のままで **Deploy**
-   （Root Directory も Output Directory も触らないこと。`vercel.json` の
-   `rewrites` が `/` を `dashboard/index.html` に向けます）
+3. **Root Directory** を `dashboard` にする（ここだけ必ず変更）
+4. Project Name を `livio-dashboard` にして **Deploy**
 4. Project Settings → General → Project Name を `livio-dashboard` にする
    （`.vercel.app` のサブドメインがこの名前になります）
 
-`dashboard/index.html` はアセットを `/dashboard/assets/...` の絶対パスで参照しています。
-GitHub Pages（`/dashboard/`）と Vercel（rewrite 後の `/`）のどちらでも同じパスで
-解決できるようにするためなので、相対パスに戻さないでください。
+Root Directory を設定すると Vercel は `dashboard/` の中だけを見るため、
+`vercel.json` もその中に置いています。
+
+`vercel.json` の `rewrites` で `/` をダッシュボードに向ける方法は使えません。
+Vercel は rewrites を適用する前に実ファイルを探すため、ルートの `index.html`
+（Progate）が先に配信されてしまいます。
 
 ## 表示するもの
 

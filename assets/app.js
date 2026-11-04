@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r7 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r8 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -393,7 +393,7 @@
       } else if (!g.available && g.url) {
         var d2 = el('p', 'line-detail');
         if (!odptKey()) {
-          d2.appendChild(document.createTextNode('ODPTキー未設定のため未取得。'));
+          d2.appendChild(document.createTextNode('ODPTキー待ちのため未取得。'));
           var kb = el('button', 'keybtn', 'キーを設定');
           kb.type = 'button';
           kb.addEventListener('click', askKey);

@@ -29,9 +29,9 @@ function parseTimetable(html) {
     const hour = Number(hm[1]);
     if (hour < 4 || hour > 25) continue;
 
-    /* この「時」の行の範囲だけを見る（最後の塊は表の終わりで切る） */
-    const stop = part.search(/<\/table>\s*<\/td>\s*<\/tr>/);
-    const body = stop >= 0 ? part.slice(0, stop) : part;
+    /* data-timetable で分割済みなので、この塊がそのまま1時間ぶん。
+       1時間が複数行に折り返される（rowspan）ため、ここで切ると取りこぼす。 */
+    const body = part;
 
     /* 入れ子の <td> があるので、内側の <td> だけを拾う。
        外側から貪欲に取ると各時の最初の1本を取りこぼす。 */
@@ -52,11 +52,12 @@ function parseTimetable(html) {
   return { table, marks };
 }
 
-async function tobus(poleno, ud, day) {
-  const u = `${TOBUS}?ln=ja&poleno=${poleno}&stopid=500&routecode=173&ud=${ud}` +
-            (day ? `&dia=${day}` : '');
+async function tobus(poleno, ud, day, stopid) {
+  stopid = stopid || 500;
+  const u = `${TOBUS}?ln=ja&poleno=${poleno}&stopid=${stopid}&routecode=173&ud=${ud}` +
+            (day ? `&${day}` : '');
   const r = await fetch(u, { headers: { 'user-agent': 'livio-dashboard' } });
-  if (!r.ok) return { poleno, ud, day, error: 'HTTP ' + r.status };
+  if (!r.ok) return { poleno, ud, stopid, day, error: 'HTTP ' + r.status };
   const raw = await r.text();
   const lines = strip(raw);
 
@@ -67,10 +68,12 @@ async function tobus(poleno, ud, day) {
   const legend = lines.filter(s => /：|:/.test(s) && /行|循環/.test(s) && s.length < 30 && !s.startsWith('行先'));
 
   const anchor = raw.indexOf('id="time_table"');
-  const region = anchor >= 0 ? raw.slice(anchor) : raw;
+  let region = anchor >= 0 ? raw.slice(anchor) : raw;
+  const tail = region.search(/ページTOP|時刻に関するご意見/);
+  if (tail > 0) region = region.slice(0, tail);
   const { table, marks } = parseTimetable(region);
 
-  return { poleno, ud, day, url: u, dest, dia, revision, legend, table, marks };
+  return { poleno, ud, stopid, day, dest, dia, revision, legend, table, marks };
 }
 
 module.exports = async function handler(req, res) {
@@ -78,14 +81,24 @@ module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=3600');
   const q = new URL(req.url, 'http://x').searchParams;
 
-  const out = { toei: [] };
-  try {
-    const combos = [[1,1],[1,2],[2,1],[2,2]];
-    for (const [p, ud] of combos) {
-      try { out.toei.push(await tobus(p, ud, q.get('day'))); }
-      catch (e) { out.toei.push({ poleno: p, ud, error: String(e.message || e) }); }
-    }
-  } catch (e) { out.toeiError = String(e.message || e); }
+  const out = { note: '', rows: [] };
+  const want = [
+    /* 港南中学校前: のりば2 が品川駅方面（のりば1はスクショと一致＝品川埠頭方面） */
+    { label: '港南中学校前 のりば2 平日', poleno: 2, ud: 2, stopid: 500, day: '' },
+    { label: '港南中学校前 のりば2 土曜', poleno: 2, ud: 2, stopid: 500, day: 'dia=2' },
+    { label: '港南中学校前 のりば2 休日', poleno: 2, ud: 2, stopid: 500, day: 'dia=3' },
+    /* 品川駅港南口（帰宅方向）。のりば番号は総当たりで確かめる */
+    { label: '品川駅港南口 のりば8 平日', poleno: 8, ud: 1, stopid: 605, day: '' },
+    { label: '品川駅港南口 のりば1 平日', poleno: 1, ud: 1, stopid: 605, day: '' },
+  ];
+  for (const w of want) {
+    try {
+      const r = await tobus(w.poleno, w.ud, w.day, w.stopid);
+      const n = Object.values(r.table || {}).reduce((a, b) => a + b.length, 0);
+      out.rows.push({ label: w.label, dest: r.dest, dia: r.dia, revision: r.revision,
+                      legend: r.legend, count: n, table: r.table, marks: r.marks });
+    } catch (e) { out.rows.push({ label: w.label, error: String(e.message || e) }); }
+  }
 
   return res.status(200).json(out);
 };

@@ -8,7 +8,7 @@ const CKAN = 'https://catalog.data.metro.tokyo.lg.jp/api/3/action/package_show?i
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
 
   try {
     const pkg = await fetch(CKAN, { headers: { 'user-agent': 'livio-dashboard' } });

@@ -78,10 +78,10 @@ async function tobus(poleno, ud, day, stopid) {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=3600');
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   const q = new URL(req.url, 'http://x').searchParams;
 
-  const out = { note: '', rows: [] };
+  const out = { api: 'bus-r2', fetchedAt: new Date().toISOString(), rows: [] };
   const want = [
     /* 港南中学校前: のりば2 が品川駅方面（のりば1はスクショと一致＝品川埠頭方面） */
     { label: '港南中学校前 のりば2 平日', poleno: 2, ud: 2, stopid: 500, day: '' },

@@ -12,7 +12,7 @@ const ALLOW = [
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=3600');
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
 
   const q = new URL(req.url, 'http://x').searchParams;
   const target = q.get('url');

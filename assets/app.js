@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r11 · 品99+ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r12 · 品99+ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -119,9 +119,10 @@
 
   /* ================= 天気 ================= */
   function weatherUrl() {
+    var H = home();
     var p = new URLSearchParams({
-      latitude: CFG.place.lat,
-      longitude: CFG.place.lon,
+      latitude: H.lat,
+      longitude: H.lon,
       current: 'temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day',
       hourly: 'temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,uv_index',
       timezone: TZ,
@@ -258,6 +259,45 @@
   /* ================= 運行情報 ================= */
   /* ODPT の TrainInformation。api-public はキー不要。
      consumerKey があれば api.odpt.org 側を使い、取得できる事業者が増える。 */
+  /* 自宅の位置。設定ファイルの値は目安なので、端末側で上書きできる。 */
+  function home() {
+    try {
+      var v = localStorage.getItem('homePos');
+      if (v) {
+        var o = JSON.parse(v);
+        if (isFinite(o.lat) && isFinite(o.lon)) return o;
+      }
+    } catch (e) {}
+    return { lat: CFG.place.lat, lon: CFG.place.lon };
+  }
+
+  function saveHome(lat, lon) {
+    try { localStorage.setItem('homePos', JSON.stringify({ lat: lat, lon: lon })); }
+    catch (e) { alert('このブラウザでは保存できませんでした'); return; }
+    load();
+  }
+
+  function useCurrentPosition() {
+    if (!navigator.geolocation) { askHomeManually(); return; }
+    navigator.geolocation.getCurrentPosition(
+      function (pos) { saveHome(pos.coords.latitude, pos.coords.longitude); },
+      function () { alert('現在地を取得できませんでした。緯度経度を貼り付けてください。'); askHomeManually(); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  function askHomeManually() {
+    var h = home();
+    var v = window.prompt(
+      '自宅の緯度経度を「35.6236, 139.7487」の形で貼り付けてください。\n' +
+      'Googleマップで建物を長押し（右クリック）すると数値が出ます。',
+      h.lat + ', ' + h.lon);
+    if (v === null) return;
+    var m = String(v).match(/(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)/);
+    if (!m) { alert('読み取れませんでした'); return; }
+    saveHome(parseFloat(m[1]), parseFloat(m[2]));
+  }
+
   function odptKey() {
     try {
       var q = new URLSearchParams(location.search).get('odptkey');
@@ -739,7 +779,7 @@
   }
 
   function fetchProvider(pv) {
-    var B = CFG.bikeshare;
+    var B = CFG.bikeshare, H = home();
     return Promise.all([
       fetch(gbfs(pv.system, 'station_information'), { cache: 'no-store' }).then(function (r) { return r.json(); }),
       fetch(gbfs(pv.system, 'station_status'), { cache: 'no-store' }).then(function (r) { return r.json(); }),
@@ -752,7 +792,7 @@
           provider: pv.label,
           name: st.name,
           lat: st.lat, lon: st.lon,
-          direct: haversine(CFG.place.lat, CFG.place.lon, st.lat, st.lon),
+          direct: haversine(H.lat, H.lon, st.lat, st.lon),
           st: byId[st.station_id],
         };
       }).filter(function (x) { return x.st && x.direct <= B.radiusMeters; });
@@ -766,7 +806,7 @@
     var W = CFG.bikeshare.walk;
     if (!W || !W.enabled || !ports.length) return Promise.resolve(null);
     var body = {
-      sources: [{ lat: CFG.place.lat, lon: CFG.place.lon }],
+      sources: [{ lat: home().lat, lon: home().lon }],
       targets: ports.map(function (p) { return { lat: p.lat, lon: p.lon }; }),
       costing: 'pedestrian',
       units: 'kilometers',
@@ -816,7 +856,18 @@
     var card = $('share-card');
     if (!list || !list.length) { card.hidden = true; return; }
     card.hidden = false;
-    $('share-updated').textContent = pad(t.hh) + ':' + pad(t.mm) + ' 更新';
+    var up = $('share-updated');
+    up.innerHTML = '';
+    up.appendChild(document.createTextNode(pad(t.hh) + ':' + pad(t.mm) + ' 更新 '));
+    var gps = el('button', 'keybtn', '現在地から');
+    gps.type = 'button';
+    gps.addEventListener('click', useCurrentPosition);
+    up.appendChild(gps);
+    up.appendChild(document.createTextNode(' '));
+    var man = el('button', 'keybtn', '座標を入力');
+    man.type = 'button';
+    man.addEventListener('click', askHomeManually);
+    up.appendChild(man);
 
     var box = $('ports');
     box.innerHTML = '';
@@ -848,6 +899,13 @@
 
     var note = $('port-note');
     note.innerHTML = '';
+    var custom = false;
+    try { custom = !!localStorage.getItem('homePos'); } catch (e) {}
+    if (!custom) {
+      var warn = el('div', 'port-warn',
+        '自宅の位置が未設定です。設定前の座標は目安のため、実際より遠い／近いポートが出ることがあります。右上の「現在地から」で直ります。');
+      note.appendChild(warn);
+    }
     if (CFG.bikeshare.luupUrl) {
       var a = el('a', 'luup-btn');
       a.href = CFG.bikeshare.luupUrl;

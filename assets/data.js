@@ -6,6 +6,9 @@
 window.DASHBOARD_CONFIG = {
   /* 住まいの位置。天気とバイクシェアの検索に使います。
      地図で正確な緯度経度を調べたら、ここを書き換えてください。 */
+  /* 下の緯度経度はおおよその値で、実測では天王洲寄りにずれていました。
+     ダッシュボードの「現在地から」か「座標を入力」で設定すると、
+     端末側に保存されてこちらより優先されます。 */
   place: {
     label: '東京都港区・港南3丁目',
     building: 'リビオタワー品川',
@@ -27,7 +30,7 @@ window.DASHBOARD_CONFIG = {
      LUUP は公開APIが無いため取得できません（提携サービス経由のみ）。 */
   bikeshare: {
     enabled: true,
-    radiusMeters: 900,
+    radiusMeters: 1000,
     maxPorts: 4,
     providers: [
       { id: 'docomo', label: 'ドコモ・バイクシェア', system: 'docomo-cycle-tokyo' },

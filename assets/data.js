@@ -48,12 +48,18 @@ window.DASHBOARD_CONFIG = {
   /* 品川駅まわりの運行情報。
      公共交通オープンデータセンター(ODPT)の odpt:TrainInformation を使います。
      api-public はキー不要ですが、事業者によっては提供されない場合があります。
-     odpt.org で無料の開発者登録をして consumerKey を入れると全事業者を取得できます。 */
+     実測（2026-11）では api-public がデータを返すのは東京都交通局のみで、
+     JR東日本・京急・りんかい線・モノレールは 0 件でした。これらを取得するには
+     odpt.org の無料開発者登録で得た consumerKey が必要です。
+
+     ※ このリポジトリは公開なので、キーをここに書かないでください。
+       ダッシュボードを ?odptkey=取得したキー 付きで一度開けば、
+       ブラウザの localStorage に保存されます。 */
   rail: {
     enabled: true,
     publicBase: 'https://api-public.odpt.org/api/v4/odpt:TrainInformation',
     keyedBase: 'https://api.odpt.org/api/v4/odpt:TrainInformation',
-    consumerKey: '',   // ← odpt.org で取得したキーを入れると取得範囲が広がります
+    consumerKey: '',   // ← 空のままにする（上の注意を参照）
     groups: [
       {
         label: '品川乗り入れJR線',

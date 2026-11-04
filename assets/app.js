@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r4 · 運行情報=ODPT · 徒歩=実経路 · シェア=ドコモ+HELLO · ホーム画面対応';
+  var BUILD = 'r5 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -258,8 +258,17 @@
   /* ================= 運行情報 ================= */
   /* ODPT の TrainInformation。api-public はキー不要。
      consumerKey があれば api.odpt.org 側を使い、取得できる事業者が増える。 */
+  function odptKey() {
+    try {
+      var q = new URLSearchParams(location.search).get('odptkey');
+      if (q) { localStorage.setItem('odptKey', q); return q; }
+      return localStorage.getItem('odptKey') || CFG.rail.consumerKey || '';
+    } catch (e) { return CFG.rail.consumerKey || ''; }
+  }
+
   function railUrl(operator) {
     var R = CFG.rail;
+    R = { publicBase: R.publicBase, keyedBase: R.keyedBase, consumerKey: odptKey() };
     if (R.consumerKey) {
       return R.keyedBase + '?odpt:operator=' + encodeURIComponent(operator) +
         '&acl:consumerKey=' + encodeURIComponent(R.consumerKey);
@@ -298,7 +307,7 @@
         .then(function (list) { return { op: op, list: Array.isArray(list) ? list : null }; })
         .catch(function () { return { op: op, list: null }; });
     })).then(function (res) {
-      var any = res.some(function (r) { return r.list !== null; });
+      var any = res.some(function (r) { return Array.isArray(r.list) && r.list.length > 0; });
       if (!any) throw new Error('rail: 全事業者で取得失敗');
       var byOp = {};
       res.forEach(function (r) { byOp[r.op] = r.list; });
@@ -310,7 +319,11 @@
   function railGroups(byOp) {
     return CFG.rail.groups.map(function (g) {
       var ops = [g.operator].concat(g.extraOperators || []);
-      var available = ops.some(function (o) { return byOp[o] != null; });
+      /* 運行情報は平常時も全路線ぶん返ってくる。0件は「アクセスできていない」
+         ことを意味するので、平常運転と誤表示しないよう未取得として扱う。 */
+      var available = ops.some(function (o) {
+        return Array.isArray(byOp[o]) && byOp[o].length > 0;
+      });
       var rows = [];
       ops.forEach(function (o) {
         (byOp[o] || []).forEach(function (item) { rows.push(item); });
@@ -364,8 +377,10 @@
         });
       } else if (!g.available && g.url) {
         var d2 = el('p', 'line-detail');
+        if (!odptKey()) d2.appendChild(document.createTextNode('ODPTキー未設定のため未取得。'));
         var a = el('a', null, '公式の運行情報 ›');
         a.href = g.url; a.target = '_blank'; a.rel = 'noopener';
+        d2.appendChild(document.createTextNode(' '));
         d2.appendChild(a);
         main.appendChild(d2);
       }

@@ -59,6 +59,16 @@
 
   var jobs = [];
 
+  // 保存済みの ODPT キーがあれば、そちらでも試す
+  var KEY = (function () {
+    try {
+      var q = new URLSearchParams(location.search).get('odptkey');
+      if (q) { localStorage.setItem('odptKey', q); return q; }
+      return localStorage.getItem('odptKey') || '';
+    } catch (e) { return ''; }
+  })();
+  lines.push(KEY ? 'ODPTキー: 設定あり' : 'ODPTキー: 未設定');
+
   // 1. 天気
   (function () {
     var done = row('天気 Open-Meteo');
@@ -72,8 +82,14 @@
   ['odpt.Operator:JR-East', 'odpt.Operator:Keikyu', 'odpt.Operator:Toei',
    'odpt.Operator:TWR', 'odpt.Operator:TokyoMonorail'].forEach(function (op) {
     var done = row('運行情報 ' + op.split(':')[1]);
-    jobs.push(get(CFG.rail.publicBase + '?odpt:operator=' + encodeURIComponent(op))
-      .then(function (j) { done(true, (j.length || 0) + ' 路線'); })
+    var url = KEY
+      ? CFG.rail.keyedBase + '?odpt:operator=' + encodeURIComponent(op) + '&acl:consumerKey=' + encodeURIComponent(KEY)
+      : CFG.rail.publicBase + '?odpt:operator=' + encodeURIComponent(op);
+    jobs.push(get(url)
+      .then(function (j) {
+        var n = j.length || 0;
+        done(n > 0, n + ' 路線' + (n === 0 ? '（0件=実質取得できず）' : '') + (KEY ? ' [キー使用]' : ''));
+      })
       .catch(function (e) { done(false, e.message); }));
   });
 

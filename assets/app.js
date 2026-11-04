@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r10 · ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r11 · 品99+ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -505,8 +505,10 @@
   function tableFor(table, t) {
     if (!isDayTyped(table)) return table;
     var holiday = t.dow === 0 || (window.HOLIDAYS || []).indexOf(t.iso) >= 0;
-    var order = holiday ? ['holiday', 'saturday', 'weekday']
-      : t.dow === 6 ? ['saturday', 'holiday', 'weekday']
+    /* 土休日のダイヤが無いときに平日へ退避すると、休日に平日の時刻を
+       出してしまう。土休日どうしの相互退避だけを許し、平日へは落とさない。 */
+    var order = holiday ? ['holiday', 'saturday']
+      : t.dow === 6 ? ['saturday', 'holiday']
       : ['weekday'];
     for (var i = 0; i < order.length; i++) {
       if (table[order[i]]) return table[order[i]];

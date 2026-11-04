@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r9 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r10 · ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -651,10 +651,35 @@
     }, t));
 
     (window.LOCAL_BUSES || []).forEach(function (r) {
+      if (r.directions && r.directions.length) {
+        var key = 'dir_' + r.name;
+        if (!state[key]) state[key] = (t.hh >= 15 ? 'in' : 'out');
+        var cur = r.directions.filter(function (d) { return d.id === state[key]; })[0] || r.directions[0];
+
+        var tabs = el('div', 'dirs');
+        r.directions.forEach(function (d) {
+          var btn = el('button', null, d.id === 'out' ? '自宅発' : '品川駅発');
+          btn.type = 'button';
+          btn.setAttribute('aria-pressed', String(d.id === cur.id));
+          btn.addEventListener('click', function () {
+            state[key] = d.id; paintRoutes(tokyoNow());
+          });
+          tabs.appendChild(btn);
+        });
+
+        box.appendChild(routeCard({
+          name: r.name, badge: r.badge, accent: r.accent,
+          from: cur.from, to: cur.to, table: cur.table, dirs: tabs, url: r.url,
+          modal: { title: r.name, note: r.source ? '出典: ' + r.source : '', directions: r.directions },
+        }, t));
+        return;
+      }
+
       box.appendChild(routeCard({
         name: r.name, badge: r.badge, accent: r.accent,
         from: r.from, to: r.to, table: r.table, url: r.url,
-        modal: { title: r.name, directions: [{ from: r.from, to: r.to, table: r.table }] },
+        modal: { title: r.name, note: r.source ? '出典: ' + r.source : '',
+                 directions: [{ from: r.from, to: r.to, table: r.table }] },
       }, t));
     });
   }

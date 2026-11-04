@@ -97,6 +97,29 @@
     }).catch(function (e) { done(false, e.message); }));
   });
 
+  // 3b. LUUP が ODPT の GBFS に居るか総当たりで確認する
+  (function () {
+    var done = row('LUUP を ODPT GBFS から探す');
+    var ids = ['luup', 'Luup', 'luup-tokyo', 'luup-jp', 'luup-cycle', 'luup-mobility'];
+    jobs.push(Promise.all(ids.map(function (id) {
+      return fetch(CFG.bikeshare.base + id + '/station_information.json', { cache: 'no-store' })
+        .then(function (r) { return { id: id, code: r.status }; })
+        .catch(function () { return { id: id, code: 0 }; });
+    })).then(function (res) {
+      var hit = res.filter(function (r) { return r.code === 200; });
+      if (hit.length) done(true, '見つかった: ' + hit.map(function (h) { return h.id; }).join(', '));
+      else done(false, '全滅 ' + res.map(function (r) { return r.id + '=' + (r.code || 'err'); }).join(' '));
+    }));
+  })();
+
+  // 3c. ODPT の GBFS 一覧（提供システムの一覧が取れるか）
+  (function () {
+    var done = row('ODPT GBFS の提供一覧');
+    jobs.push(get('https://api-public.odpt.org/api/v4/gbfs/')
+      .then(function (j) { done(true, JSON.stringify(j).slice(0, 200)); })
+      .catch(function (e) { done(false, e.message); }));
+  })();
+
   // 4. 徒歩ルート
   (function () {
     var done = row('徒歩ルート Valhalla');

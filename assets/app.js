@@ -254,31 +254,89 @@
   }
 
   /* ================= 運行情報 ================= */
+  /* ODPT の TrainInformation。api-public はキー不要。
+     consumerKey があれば api.odpt.org 側を使い、取得できる事業者が増える。 */
+  function railUrl(operator) {
+    var R = CFG.rail;
+    if (R.consumerKey) {
+      return R.keyedBase + '?odpt:operator=' + encodeURIComponent(operator) +
+        '&acl:consumerKey=' + encodeURIComponent(R.consumerKey);
+    }
+    return R.publicBase + '?odpt:operator=' + encodeURIComponent(operator);
+  }
+
+  /* 多言語オブジェクト or 文字列のどちらでも来るので吸収する */
+  function jaText(v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    return v.ja || v.en || '';
+  }
+
+  function railwayTail(id) {
+    var str = String(id || '');
+    var dot = str.lastIndexOf('.');
+    return dot >= 0 ? str.slice(dot + 1) : str;
+  }
+
   function fetchRail() {
     if (!CFG.rail.enabled) return Promise.resolve(null);
     if (MOCK) return Promise.resolve(mockRail());
-    return fetch(CFG.rail.url, { cache: 'no-store' })
-      .then(function (r) { if (!r.ok) throw new Error('rail ' + r.status); return r.json(); });
-  }
 
-  /* delay.json は「いま遅れている路線」だけの配列。
-     載っていない = 平常運転、として扱う。 */
-  function railGroups(list) {
-    return CFG.rail.groups.map(function (g) {
-      var hit = (list || []).filter(function (item) {
-        var name = String(item.name || '');
-        var co = String(item.company || '');
-        var nameHit = g.match.some(function (m) { return name.indexOf(m) >= 0; });
-        if (!nameHit) return false;
-        if (g.company) return g.company.some(function (c) { return co.indexOf(c) >= 0; }) || co === '';
-        return true;
-      });
-      return { label: g.label, url: g.url, hits: hit };
+    var ops = [];
+    CFG.rail.groups.forEach(function (g) {
+      ops.push(g.operator);
+      (g.extraOperators || []).forEach(function (o) { ops.push(o); });
+    });
+    ops = ops.filter(function (o, i) { return ops.indexOf(o) === i; });
+
+    /* 1事業者でも取れれば表示する。全滅したときだけ失敗扱い。 */
+    return Promise.all(ops.map(function (op) {
+      return fetch(railUrl(op), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (list) { return { op: op, list: Array.isArray(list) ? list : null }; })
+        .catch(function () { return { op: op, list: null }; });
+    })).then(function (res) {
+      var any = res.some(function (r) { return r.list !== null; });
+      if (!any) throw new Error('rail: 全事業者で取得失敗');
+      var byOp = {};
+      res.forEach(function (r) { byOp[r.op] = r.list; });
+      return byOp;
     });
   }
 
-  function paintRail(list, t, w) {
-    var groups = railGroups(list);
+  /* グループごとに「乱れている路線」と、その説明文を取り出す */
+  function railGroups(byOp) {
+    return CFG.rail.groups.map(function (g) {
+      var ops = [g.operator].concat(g.extraOperators || []);
+      var available = ops.some(function (o) { return byOp[o] != null; });
+      var rows = [];
+      ops.forEach(function (o) {
+        (byOp[o] || []).forEach(function (item) { rows.push(item); });
+      });
+
+      if (g.railways && g.railways.length) {
+        rows = rows.filter(function (item) {
+          return g.railways.indexOf(railwayTail(item['odpt:railway'])) >= 0;
+        });
+      }
+
+      /* trainInformationStatus があるものが「平常でない」路線 */
+      var hits = rows.filter(function (item) {
+        return !!jaText(item['odpt:trainInformationStatus']);
+      }).map(function (item) {
+        return {
+          railway: railwayTail(item['odpt:railway']),
+          status: jaText(item['odpt:trainInformationStatus']),
+          text: jaText(item['odpt:trainInformationText']),
+        };
+      });
+
+      return { label: g.label, url: g.url, hits: hits, available: available, count: rows.length };
+    });
+  }
+
+  function paintRail(byOp, t, w) {
+    var groups = railGroups(byOp);
     var box = $('station-lines');
     box.innerHTML = '';
 
@@ -288,22 +346,26 @@
       if (bad) disrupted += g.hits.length;
 
       var row = el('div', 'line-row');
-      row.appendChild(el('i', 'dot ' + (bad ? 'dot-warn' : 'dot-ok')));
+      row.appendChild(el('i', 'dot ' + (!g.available ? '' : bad ? 'dot-warn' : 'dot-ok')));
       var main = el('div', 'line-main');
       var head = el('div', 'line-head');
       head.appendChild(el('div', 'line-name', g.label));
-      head.appendChild(el('div', 'line-state ' + (bad ? 'is-warn' : 'is-ok'), bad ? '遅延・乱れ' : '平常運転'));
+      head.appendChild(el('div', 'line-state ' + (!g.available ? 'is-ok' : bad ? 'is-warn' : 'is-ok'),
+        !g.available ? '取得できず' : bad ? g.hits[0].status : '平常運転'));
       main.appendChild(head);
+
       if (bad) {
-        var d = el('p', 'line-detail');
-        d.appendChild(document.createTextNode(g.hits.map(function (x) { return x.name; }).join(' / ') + ' に遅れの情報。'));
-        if (g.url) {
-          var a = el('a', null, '公式の運行情報 ›');
-          a.href = g.url; a.target = '_blank'; a.rel = 'noopener';
-          d.appendChild(document.createTextNode(' '));
-          d.appendChild(a);
-        }
-        main.appendChild(d);
+        g.hits.slice(0, 3).forEach(function (h) {
+          var d = el('p', 'line-detail');
+          d.textContent = (h.text || h.status) ;
+          main.appendChild(d);
+        });
+      } else if (!g.available && g.url) {
+        var d2 = el('p', 'line-detail');
+        var a = el('a', null, '公式の運行情報 ›');
+        a.href = g.url; a.target = '_blank'; a.rel = 'noopener';
+        d2.appendChild(a);
+        main.appendChild(d2);
       }
       row.appendChild(main);
       box.appendChild(row);
@@ -608,27 +670,81 @@
     return 2 * R * Math.asin(Math.sqrt(s));
   }
 
+  function gbfs(system, file) {
+    return CFG.bikeshare.base + system + '/' + file + '.json';
+  }
+
+  function fetchProvider(pv) {
+    var B = CFG.bikeshare;
+    return Promise.all([
+      fetch(gbfs(pv.system, 'station_information'), { cache: 'no-store' }).then(function (r) { return r.json(); }),
+      fetch(gbfs(pv.system, 'station_status'), { cache: 'no-store' }).then(function (r) { return r.json(); }),
+    ]).then(function (res) {
+      var info = res[0].data.stations, status = res[1].data.stations;
+      var byId = {};
+      status.forEach(function (st) { byId[st.station_id] = st; });
+      return info.map(function (st) {
+        return {
+          provider: pv.label,
+          name: st.name,
+          lat: st.lat, lon: st.lon,
+          direct: haversine(CFG.place.lat, CFG.place.lon, st.lat, st.lon),
+          st: byId[st.station_id],
+        };
+      }).filter(function (x) { return x.st && x.direct <= B.radiusMeters; });
+    }).catch(function () { return []; });
+  }
+
+  /* 直線距離ではなく、実際に歩く経路の距離と時間を出す。
+     運河や橋の迂回があるため直線では大きく外れる。取れなければ null を返し、
+     表示側は「徒歩◯分」を出さずに直線距離だけを見せる。 */
+  function fetchWalk(ports) {
+    var W = CFG.bikeshare.walk;
+    if (!W || !W.enabled || !ports.length) return Promise.resolve(null);
+    var body = {
+      sources: [{ lat: CFG.place.lat, lon: CFG.place.lon }],
+      targets: ports.map(function (p) { return { lat: p.lat, lon: p.lon }; }),
+      costing: 'pedestrian',
+      units: 'kilometers',
+    };
+    return fetch(W.url + '?json=' + encodeURIComponent(JSON.stringify(body)), { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('walk ' + r.status); return r.json(); })
+      .then(function (j) {
+        var row = (j.sources_to_targets || [])[0];
+        if (!row) throw new Error('walk: 経路なし');
+        return row.map(function (cell) {
+          if (!cell || cell.distance == null) return null;
+          var meters = cell.distance * 1000;
+          var min = cell.time != null ? Math.round(cell.time / 60)
+            : Math.round(meters / (W.speedKmh * 1000 / 60));
+          return { meters: Math.round(meters), minutes: Math.max(1, min) };
+        });
+      })
+      .catch(function (e) { console.warn(e); return null; });
+  }
+
   function fetchPorts() {
     var B = CFG.bikeshare;
     if (!B.enabled) return Promise.resolve(null);
     if (MOCK) return Promise.resolve(mockPorts());
-    return Promise.all([
-      fetch(B.infoUrl, { cache: 'no-store' }).then(function (r) { return r.json(); }),
-      fetch(B.statusUrl, { cache: 'no-store' }).then(function (r) { return r.json(); }),
-    ]).then(function (res) {
-      var info = res[0].data.stations, status = res[1].data.stations;
-      var byId = {};
-      status.forEach(function (s) { byId[s.station_id] = s; });
-      return info.map(function (s) {
-        return {
-          id: s.station_id,
-          name: s.name,
-          dist: haversine(CFG.place.lat, CFG.place.lon, s.lat, s.lon),
-          st: byId[s.station_id],
-        };
-      }).filter(function (s) { return s.st && s.dist <= B.radiusMeters; })
-        .sort(function (x, y) { return x.dist - y.dist; })
-        .slice(0, B.maxPorts);
+
+    return Promise.all(B.providers.map(fetchProvider)).then(function (lists) {
+      var all = [];
+      lists.forEach(function (l) { l.forEach(function (x) { all.push(x); }); });
+      all.sort(function (a, b) { return a.direct - b.direct; });
+      var top = all.slice(0, B.maxPorts);
+      if (!top.length) return [];
+      return fetchWalk(top).then(function (walks) {
+        if (walks) top.forEach(function (p, i) { p.walk = walks[i]; });
+        /* 歩行距離が取れたら、その順に並べ替える */
+        if (walks) {
+          top.sort(function (a, b) {
+            var av = a.walk ? a.walk.meters : Infinity, bv = b.walk ? b.walk.meters : Infinity;
+            return av - bv;
+          });
+        }
+        return top;
+      });
     });
   }
 
@@ -640,26 +756,41 @@
 
     var box = $('ports');
     box.innerHTML = '';
-    list.forEach(function (s) {
-      var bikes = s.st.num_bikes_available;
-      var docks = s.st.num_docks_available;
+    list.forEach(function (sp) {
+      var bikes = sp.st.num_bikes_available;
+      var docks = sp.st.num_docks_available;
       var p = el('div', 'port');
       var nm = el('div', 'port-name');
-      nm.appendChild(el('span', 'tag', '自転車'));
-      nm.appendChild(document.createTextNode(s.name));
+      nm.appendChild(el('span', 'tag', sp.provider));
+      nm.appendChild(document.createTextNode(sp.name));
       p.appendChild(nm);
 
       var nums = el('div', 'port-nums');
       [['利用可能', bikes], ['返却可能', docks]].forEach(function (pair) {
         var n = el('div', 'port-num' + (pair[1] <= 1 ? ' is-low' : ''));
-        n.appendChild(el('b', null, String(pair[1])));
+        n.appendChild(el('b', null, String(pair[1] == null ? '—' : pair[1])));
         n.appendChild(el('div', 'label', pair[0]));
         nums.appendChild(n);
       });
       p.appendChild(nums);
-      p.appendChild(el('div', 'port-foot', Math.round(s.dist) + ' m · 徒歩 約' + Math.max(1, Math.round(s.dist / 80)) + '分'));
+
+      /* 歩行経路が取れたときだけ所要時間を出す。直線距離から分を作らない。 */
+      var foot = sp.walk
+        ? '徒歩 約' + sp.walk.minutes + '分 · 経路 ' + sp.walk.meters + ' m'
+        : '直線 ' + Math.round(sp.direct) + ' m（徒歩経路は取得できず）';
+      p.appendChild(el('div', 'port-foot', foot));
       box.appendChild(p);
     });
+
+    var note = $('port-note');
+    note.innerHTML = '';
+    if (CFG.bikeshare.luupUrl) {
+      note.appendChild(document.createTextNode('LUUP は空き状況の公開APIが無いため表示できません。'));
+      var a = el('a', null, 'アプリで確認 ›');
+      a.href = CFG.bikeshare.luupUrl; a.target = '_blank'; a.rel = 'noopener';
+      note.appendChild(document.createTextNode(' '));
+      note.appendChild(a);
+    }
   }
 
   /* ================= データバッジ ================= */
@@ -704,7 +835,7 @@
 
     if (CFG.rail.enabled) {
       jobs.push(fetchRail().then(function (list) {
-        state.rail = Array.isArray(list) ? list : [];
+        state.rail = list || {};
         state.railOk = true;
         ok++; notes.push('運行情報 ○');
       }).catch(function (e) {
@@ -765,16 +896,35 @@
     };
   }
   function mockRail() {
-    return [
-      { name: '横須賀線', company: 'JR東日本', source: 'mock' },
-      { name: '京急本線', company: '京浜急行電鉄', source: 'mock' },
-    ];
+    return {
+      'odpt.Operator:JR-East': [
+        { 'odpt:railway': 'odpt.Railway:JR-East.Yamanote',
+          'odpt:trainInformationText': { ja: '平常どおり運転しています。' } },
+        { 'odpt:railway': 'odpt.Railway:JR-East.Yokosuka',
+          'odpt:trainInformationStatus': { ja: '遅延' },
+          'odpt:trainInformationText': { ja: '大雨の影響で、品川〜勝田台駅間の上下線の一部列車に遅れがでています。' } },
+      ],
+      'odpt.Operator:Keikyu': [
+        { 'odpt:railway': 'odpt.Railway:Keikyu.Main',
+          'odpt:trainInformationStatus': { ja: '運転見合わせ' },
+          'odpt:trainInformationText': { ja: '大雨による速度規制の影響で泉岳寺〜品川駅間の上下線の運転を見合わせています。' } },
+      ],
+      'odpt.Operator:Toei': [
+        { 'odpt:railway': 'odpt.Railway:Toei.Asakusa',
+          'odpt:trainInformationText': { ja: '平常どおり運転しています。' } },
+      ],
+      'odpt.Operator:TWR': null,
+      'odpt.Operator:TokyoMonorail': null,
+    };
   }
   function mockPorts() {
     return [
-      { id: 'a', name: 'C5-12.第2東運ビル', dist: 180, st: { num_bikes_available: 6, num_docks_available: 7 } },
-      { id: 'b', name: 'C5-18.パークタワー品川ベイワード', dist: 320, st: { num_bikes_available: 10, num_docks_available: 15 } },
-      { id: 'c', name: 'C5-62.ロイヤルパークス品川', dist: 460, st: { num_bikes_available: 6, num_docks_available: 3 } },
+      { provider: 'ドコモ', name: 'C5-12.第2東運ビル', lat: 0, lon: 0, direct: 180,
+        walk: { meters: 240, minutes: 4 }, st: { num_bikes_available: 6, num_docks_available: 7 } },
+      { provider: 'HELLO', name: '品川シーサイド駐輪場', lat: 0, lon: 0, direct: 320,
+        walk: { meters: 430, minutes: 6 }, st: { num_bikes_available: 10, num_docks_available: 15 } },
+      { provider: 'ドコモ', name: 'I1-54.天王洲オーシャンスクエア', lat: 0, lon: 0, direct: 155,
+        walk: { meters: 760, minutes: 10 }, st: { num_bikes_available: 61, num_docks_available: 16 } },
     ];
   }
 

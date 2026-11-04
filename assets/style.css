@@ -443,3 +443,7 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .route, .card { transition: box-shadow .2s ease; }
 }
+
+.port-note { font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+.port-note a { color: var(--green); font-weight: 700; text-decoration: none; }
+.port-note a:hover { text-decoration: underline; }

@@ -23,37 +23,62 @@ window.DASHBOARD_CONFIG = {
     gustAvoid: 12,         // m/s 瞬間最大がこれ以上で「非推奨」
   },
 
-  /* ドコモ・バイクシェアの空き状況（GBFS）。
-     取得できない環境ではカードごと非表示になります。 */
+  /* シェアサイクルの空き状況（GBFS / 公共交通オープンデータセンター）。
+     LUUP は公開APIが無いため取得できません（提携サービス経由のみ）。 */
   bikeshare: {
     enabled: true,
-    radiusMeters: 700,
-    maxPorts: 3,
-    infoUrl: 'https://api-public.odpt.org/api/v4/gbfs/docomo-cycle-tokyo/station_information.json',
-    statusUrl: 'https://api-public.odpt.org/api/v4/gbfs/docomo-cycle-tokyo/station_status.json',
+    radiusMeters: 900,
+    maxPorts: 4,
+    providers: [
+      { id: 'docomo', label: 'ドコモ・バイクシェア', system: 'docomo-cycle-tokyo' },
+      { id: 'hello',  label: 'HELLO CYCLING',      system: 'hellocycling' },
+    ],
+    base: 'https://api-public.odpt.org/api/v4/gbfs/',
+    /* 徒歩の所要時間。運河や橋を迂回する区間があるため直線距離では正しく出ません。
+       経路検索に成功したときだけ「徒歩◯分」を表示し、失敗したら直線距離のみ出します。 */
+    walk: {
+      enabled: true,
+      url: 'https://valhalla1.openstreetmap.de/sources_to_targets',
+      speedKmh: 4.5,
+    },
+    /* LUUP はアプリで確認するためのリンクだけ置いています。 */
+    luupUrl: 'https://luup.sc/',
   },
 
-  /* 品川駅まわりの運行情報。鉄道遅延情報のjson（無料・キー不要）を使います。 */
+  /* 品川駅まわりの運行情報。
+     公共交通オープンデータセンター(ODPT)の odpt:TrainInformation を使います。
+     api-public はキー不要ですが、事業者によっては提供されない場合があります。
+     odpt.org で無料の開発者登録をして consumerKey を入れると全事業者を取得できます。 */
   rail: {
     enabled: true,
-    url: 'https://tetsudo.rti-giken.jp/free/delay.json',
-    /* 品川・天王洲アイル から使う路線をグループにまとめて表示します。
-       match は路線名の部分一致です。 */
+    publicBase: 'https://api-public.odpt.org/api/v4/odpt:TrainInformation',
+    keyedBase: 'https://api.odpt.org/api/v4/odpt:TrainInformation',
+    consumerKey: '',   // ← odpt.org で取得したキーを入れると取得範囲が広がります
     groups: [
       {
         label: '品川乗り入れJR線',
-        match: ['山手', '京浜東北', '東海道', '横須賀', '上野東京', '常磐', '総武', '湘南新宿'],
-        company: ['JR東日本', 'ＪＲ東日本'],
+        operator: 'odpt.Operator:JR-East',
+        /* odpt:railway の末尾で絞り込み。空なら事業者の全路線 */
+        railways: ['Yamanote', 'KeihinTohokuNegishi', 'Tokaido', 'Yokosuka', 'UenoTokyo', 'Joban', 'SobuRapid'],
         url: 'https://traininfo.jreast.co.jp/train_info/kanto.aspx',
       },
       {
         label: '京急（品川関連）',
-        match: ['京急', '京浜急行', '浅草線'],
+        operator: 'odpt.Operator:Keikyu',
+        railways: [],
         url: 'https://unkou.keikyu.co.jp/',
       },
       {
+        label: '都営浅草線（京急直通）',
+        operator: 'odpt.Operator:Toei',
+        railways: ['Asakusa'],
+        url: 'https://www.kotsu.metro.tokyo.jp/subway/schedule/',
+      },
+      {
         label: 'りんかい線・モノレール',
-        match: ['りんかい', 'モノレール'],
+        operator: 'odpt.Operator:TWR',
+        railways: [],
+        extraOperators: ['odpt.Operator:TokyoMonorail'],
         url: 'https://www.twr.co.jp/unkou/',
       },
     ],

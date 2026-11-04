@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>接続チェック</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .wrap { max-width: 860px; }
+  .chk { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.75; }
+  .chk .ok { color: var(--green); font-weight: 700; }
+  .chk .ng { color: var(--red); font-weight: 700; }
+  .chk .wait { color: var(--muted); }
+  .chk div { padding: 3px 0; border-bottom: 1px solid var(--line); }
+  #copy { margin-top: 16px; }
+  textarea { width: 100%; height: 200px; font-family: ui-monospace, monospace; font-size: 12px;
+             border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+             background: var(--card-2); color: var(--ink); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1 class="h-title" style="font-size:22px;margin:8px 0 4px">接続チェック</h1>
+  <p class="sub">ダッシュボードが使う外部データに、このブラウザから実際に届くかを確認します。</p>
+  <section class="card"><div class="chk" id="out"></div></section>
+  <div id="copy">
+    <p class="sub">下の内容をそのまま貼って送ってください。</p>
+    <textarea id="txt" readonly></textarea>
+  </div>
+</main>
+
+<script src="assets/data.js"></script>
+<script>
+(function () {
+  var CFG = window.DASHBOARD_CONFIG;
+  var out = document.getElementById('out');
+  var txt = document.getElementById('txt');
+  var lines = [];
+
+  function row(name) {
+    var d = document.createElement('div');
+    d.innerHTML = '<span class="wait">… </span>' + name;
+    out.appendChild(d);
+    return function (ok, detail) {
+      d.innerHTML = '<span class="' + (ok ? 'ok">OK ' : 'ng">NG ') + '</span>' + name +
+                    (detail ? ' — ' + detail : '');
+      lines.push((ok ? 'OK ' : 'NG ') + name + (detail ? ' — ' + detail : ''));
+      txt.value = lines.join('\n');
+    };
+  }
+
+  function get(url) {
+    return fetch(url, { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  var jobs = [];
+
+  // 1. 天気
+  (function () {
+    var done = row('天気 Open-Meteo');
+    jobs.push(get('https://api.open-meteo.com/v1/forecast?latitude=' + CFG.place.lat +
+      '&longitude=' + CFG.place.lon + '&current=temperature_2m&timezone=Asia%2FTokyo')
+      .then(function (j) { done(true, '気温 ' + j.current.temperature_2m + '°'); })
+      .catch(function (e) { done(false, e.message); }));
+  })();
+
+  // 2. 運行情報（事業者ごと）
+  ['odpt.Operator:JR-East', 'odpt.Operator:Keikyu', 'odpt.Operator:Toei',
+   'odpt.Operator:TWR', 'odpt.Operator:TokyoMonorail'].forEach(function (op) {
+    var done = row('運行情報 ' + op.split(':')[1]);
+    jobs.push(get(CFG.rail.publicBase + '?odpt:operator=' + encodeURIComponent(op))
+      .then(function (j) { done(true, (j.length || 0) + ' 路線'); })
+      .catch(function (e) { done(false, e.message); }));
+  });
+
+  // 3. シェアサイクル
+  CFG.bikeshare.providers.forEach(function (pv) {
+    var done = row('GBFS ' + pv.label);
+    jobs.push(Promise.all([
+      get(CFG.bikeshare.base + pv.system + '/station_information.json'),
+      get(CFG.bikeshare.base + pv.system + '/station_status.json'),
+    ]).then(function (res) {
+      var st = res[0].data.stations;
+      var near = st.map(function (x) {
+        var R = 6371000, tr = Math.PI / 180;
+        var dLat = (x.lat - CFG.place.lat) * tr, dLon = (x.lon - CFG.place.lon) * tr;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(CFG.place.lat * tr) * Math.cos(x.lat * tr) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return { name: x.name, d: Math.round(2 * R * Math.asin(Math.sqrt(a))) };
+      }).sort(function (a, b) { return a.d - b.d; }).slice(0, 3);
+      done(true, st.length + ' ポート / 最寄 ' +
+        near.map(function (n) { return n.name + ' ' + n.d + 'm'; }).join(', '));
+    }).catch(function (e) { done(false, e.message); }));
+  });
+
+  // 4. 徒歩ルート
+  (function () {
+    var done = row('徒歩ルート Valhalla');
+    var body = {
+      sources: [{ lat: CFG.place.lat, lon: CFG.place.lon }],
+      targets: [{ lat: CFG.place.lat + 0.004, lon: CFG.place.lon + 0.004 }],
+      costing: 'pedestrian', units: 'kilometers',
+    };
+    jobs.push(get(CFG.bikeshare.walk.url + '?json=' + encodeURIComponent(JSON.stringify(body)))
+      .then(function (j) {
+        var c = j.sources_to_targets[0][0];
+        done(true, Math.round(c.distance * 1000) + 'm / ' + Math.round(c.time / 60) + '分');
+      })
+      .catch(function (e) { done(false, e.message); }));
+  })();
+
+  Promise.all(jobs).then(function () {
+    lines.push('--- 設定中の自宅座標: ' + CFG.place.lat + ', ' + CFG.place.lon);
+    lines.push('--- UA: ' + navigator.userAgent);
+    txt.value = lines.join('\n');
+  });
+})();
+</script>
+</body>
+</html>

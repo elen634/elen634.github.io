@@ -136,6 +136,33 @@
       .catch(function (e) { done(false, e.message); }));
   })();
 
+  // 3d. ちぃばす時刻表（東京都オープンデータ CKAN）がブラウザから取れるか
+  (function () {
+    var done = row('ちぃばす時刻表 東京都オープンデータ');
+    jobs.push(get('https://catalog.data.metro.tokyo.lg.jp/api/3/action/package_show?id=t131032d0000000054')
+      .then(function (j) {
+        var rs = (j.result && j.result.resources) || [];
+        var shiba = rs.filter(function (r) {
+          return /芝浦港南/.test(r.name || '') && /品川/.test(r.name || '');
+        });
+        done(true, rs.length + '件中 芝浦港南/品川 ' + shiba.length + '件: ' +
+          shiba.slice(0, 4).map(function (r) { return r.name + ' => ' + r.url; }).join(' ## '));
+      })
+      .catch(function (e) { done(false, e.message); }));
+  })();
+
+  // 3e. 都営バス 品99 の時刻表（ODPT・キーが要る）
+  (function () {
+    var done = row('都営バス時刻表 ODPT');
+    if (!KEY) { done(false, 'ODPTキー未設定のため試行せず'); return; }
+    jobs.push(get('https://api.odpt.org/api/v4/odpt:BusstopPole?odpt:operator=odpt.Operator:Toei' +
+      '&dc:title=' + encodeURIComponent('港南中学校前') + '&acl:consumerKey=' + encodeURIComponent(KEY))
+      .then(function (j) {
+        done(j.length > 0, j.length + '件 ' + j.slice(0,2).map(function (x) { return x['owl:sameAs']; }).join(','));
+      })
+      .catch(function (e) { done(false, e.message); }));
+  })();
+
   // 4. 徒歩ルート
   (function () {
     var done = row('徒歩ルート Valhalla');

@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r5 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r6 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -543,17 +543,14 @@
 
     if (!today) {
       var empty = el('div', 'route-empty');
-      empty.appendChild(el('b', null, '時刻表 未登録'));
-      empty.appendChild(document.createTextNode('assets/data.js の table に時刻を入れると、ここに発車案内が出ます。'));
+      empty.appendChild(el('b', null, '時刻表を準備中'));
+      empty.appendChild(document.createTextNode('いまは公式の時刻表をご確認ください。'));
       card.appendChild(empty);
-      var f0 = el('div', 'route-foot');
-      f0.appendChild(el('span', null, ''));
       if (opts.url) {
-        var a0 = el('a', 'route-link', '公式時刻表 ›');
-        a0.href = opts.url; a0.target = '_blank'; a0.rel = 'noopener';
-        f0.appendChild(a0);
+        var btn = el('a', 'route-cta', '公式時刻表を開く ›');
+        btn.href = opts.url; btn.target = '_blank'; btn.rel = 'noopener';
+        card.appendChild(btn);
       }
-      card.appendChild(f0);
       return card;
     }
 

@@ -9,6 +9,8 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
+  var BUILD = 'r3 · 運行情報=ODPT · 徒歩=実経路 · シェア=ドコモ+HELLO';
+
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
     var n = document.createElement(tag);
@@ -799,6 +801,7 @@
     $('data-pill-text').textContent = '実データ ' + ok + '/' + total;
     pill.querySelector('.dot').className = 'dot ' + (ok === total ? 'dot-ok' : ok ? 'dot-warn' : 'dot-bad');
     $('sources').textContent = notes.join(' · ');
+    $('build').textContent = 'ビルド ' + BUILD;
   }
 
   /* ================= 起動 ================= */

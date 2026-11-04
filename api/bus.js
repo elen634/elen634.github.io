@@ -5,7 +5,6 @@
    取得は読み取りのみ。 */
 
 const TOBUS = 'https://tobus.jp/sp/blsys/stop/time';
-const CKAN = 'https://catalog.data.metro.tokyo.lg.jp/api/3/action/package_search';
 
 function strip(html) {
   return html
@@ -16,6 +15,43 @@ function strip(html) {
     .split(/\n/).map(s => s.trim()).filter(Boolean);
 }
 
+/* tobus.jp の時刻表は
+     <tr class="hide_timetable" data-timetable="6"> … <td>23</td><td>33</td> …
+   という形。data-timetable が「時」なので、時と分を取り違えずに読める。
+   分のセルには行先の印（ﾆ 等）が付くことがあるので分けて持つ。 */
+function parseTimetable(html) {
+  const table = {};
+  const marks = {};
+  const parts = html.split(/data-timetable="/).slice(1);
+  for (const part of parts) {
+    const hm = part.match(/^(\d{1,2})"/);
+    if (!hm) continue;
+    const hour = Number(hm[1]);
+    if (hour < 4 || hour > 25) continue;
+
+    /* この「時」の行の範囲だけを見る（最後の塊は表の終わりで切る） */
+    const stop = part.search(/<\/table>\s*<\/td>\s*<\/tr>/);
+    const body = stop >= 0 ? part.slice(0, stop) : part;
+
+    /* 入れ子の <td> があるので、内側の <td> だけを拾う。
+       外側から貪欲に取ると各時の最初の1本を取りこぼす。 */
+    const cells = body.match(/<td>((?:(?!<td>)[\s\S])*?)<\/td>/g) || [];
+    for (const c of cells) {
+      const txt = c.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+      const m = txt.match(/^(\D*?)(\d{1,2})$/);
+      if (!m) continue;
+      const mark = m[1].trim();
+      const min = Number(m[2]);
+      if (min > 59) continue;
+      table[hour] = table[hour] || [];
+      table[hour].push(min);
+      if (mark) { marks[hour] = marks[hour] || {}; marks[hour][min] = mark; }
+    }
+    if (table[hour]) table[hour] = Array.from(new Set(table[hour])).sort((a, b) => a - b);
+  }
+  return { table, marks };
+}
+
 async function tobus(poleno, ud, day) {
   const u = `${TOBUS}?ln=ja&poleno=${poleno}&stopid=500&routecode=173&ud=${ud}` +
             (day ? `&dia=${day}` : '');
@@ -24,37 +60,17 @@ async function tobus(poleno, ud, day) {
   const raw = await r.text();
   const lines = strip(raw);
 
-  const dest = lines.filter(s => s.startsWith('行先:'));
+  const dest = Array.from(new Set(lines.filter(s => s.startsWith('行先:'))));
   const revision = lines.find(s => s.startsWith('改正日')) || '';
   const dia = lines.find(s => /ダイヤで運行/.test(s)) || '';
+  /* 凡例（無印/ﾆ が何行きか） */
+  const legend = lines.filter(s => /：|:/.test(s) && /行|循環/.test(s) && s.length < 30 && !s.startsWith('行先'));
 
-  /* 時刻表本体は「4時間分だけ表示する」より後ろ */
-  let i = lines.findIndex(s => /すべての時間帯を表示する|4時間分だけ表示する/.test(s));
-  const body = i >= 0 ? lines.slice(i + 1) : [];
+  const anchor = raw.indexOf('id="time_table"');
+  const region = anchor >= 0 ? raw.slice(anchor) : raw;
+  const { table, marks } = parseTimetable(region);
 
-  /* 注意: テキストだけでは「18」が時なのか分なのか判別できない。
-     下の table はあくまで暫定で、正しくは rawRegion の表構造を見て書き直す。 */
-  const table = {};
-  let hour = null;
-  for (const s of body) {
-    if (/^\d{1,2}$/.test(s)) {
-      const n = Number(s);
-      if (n >= 4 && n <= 25) { hour = n; table[hour] = table[hour] || []; continue; }
-    }
-    if (hour != null) {
-      const m = s.match(/^[^\d]{0,3}(\d{1,2})$/);
-      if (m) table[hour].push(Number(m[1]));
-    }
-  }
-
-  /* 時刻表のHTMLをそのまま切り出す。tr/td の構造で時と分を確定できる。 */
-  const html = raw;
-  let rawRegion = '';
-  const anchor = html.search(/すべての時間帯|4時間分だけ/);
-  if (anchor >= 0) rawRegion = html.slice(anchor, anchor + 2600);
-
-  return { poleno, ud, day, url: u, dest, dia, revision,
-           tableTentative: table, bodySample: body.slice(0, 80), rawRegion };
+  return { poleno, ud, day, url: u, dest, dia, revision, legend, table, marks };
 }
 
 module.exports = async function handler(req, res) {
@@ -62,27 +78,14 @@ module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=3600');
   const q = new URL(req.url, 'http://x').searchParams;
 
-  const out = { toei: [], chiibus: null };
+  const out = { toei: [] };
   try {
-    const combos = q.has('full')
-      ? [[1,1],[1,2],[2,1],[2,2],[3,1],[3,2]]
-      : [[1,1],[1,2]];
+    const combos = [[1,1],[1,2],[2,1],[2,2]];
     for (const [p, ud] of combos) {
       try { out.toei.push(await tobus(p, ud, q.get('day'))); }
       catch (e) { out.toei.push({ poleno: p, ud, error: String(e.message || e) }); }
     }
   } catch (e) { out.toeiError = String(e.message || e); }
-
-  try {
-    const r = await fetch(CKAN + '?q=' + encodeURIComponent('ちぃばす 時刻表') + '&rows=10',
-      { headers: { 'user-agent': 'livio-dashboard' } });
-    const j = await r.json();
-    out.chiibus = ((j.result && j.result.results) || []).map(p => ({
-      id: p.name || p.id, title: p.title,
-      resources: (p.resources || []).filter(x => /芝浦港南/.test(x.name || ''))
-        .map(x => ({ name: x.name, url: x.url })).slice(0, 8),
-    }));
-  } catch (e) { out.chiibusError = String(e.message || e); }
 
   return res.status(200).json(out);
 };

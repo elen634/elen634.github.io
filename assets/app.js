@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r3 · 運行情報=ODPT · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r4 · 運行情報=ODPT · 徒歩=実経路 · シェア=ドコモ+HELLO · ホーム画面対応';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -787,10 +787,10 @@
     var note = $('port-note');
     note.innerHTML = '';
     if (CFG.bikeshare.luupUrl) {
-      note.appendChild(document.createTextNode('LUUP は空き状況の公開APIが無いため表示できません。'));
-      var a = el('a', null, 'アプリで確認 ›');
-      a.href = CFG.bikeshare.luupUrl; a.target = '_blank'; a.rel = 'noopener';
-      note.appendChild(document.createTextNode(' '));
+      var a = el('a', 'luup-btn');
+      a.href = CFG.bikeshare.luupUrl;
+      a.appendChild(el('b', null, 'LUUP を開く'));
+      a.appendChild(el('span', null, '空き状況は公開APIが無いためアプリで確認'));
       note.appendChild(a);
     }
   }

@@ -42,7 +42,7 @@ window.DASHBOARD_CONFIG = {
       speedKmh: 4.5,
     },
     /* LUUP はアプリで確認するためのリンクだけ置いています。 */
-    luupUrl: 'https://luup.sc/',
+    luupUrl: 'https://luup.sc/app/',
   },
 
   /* 品川駅まわりの運行情報。

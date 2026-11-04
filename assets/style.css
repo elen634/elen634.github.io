@@ -449,3 +449,13 @@ body {
 .port-note a:hover { text-decoration: underline; }
 
 .build { font-size: 11px; color: var(--muted); opacity: .75; }
+
+.luup-btn {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 14px; padding: 13px 16px;
+  border: 1px solid var(--line); border-radius: 14px;
+  text-decoration: none; color: var(--ink);
+}
+.luup-btn:hover { border-color: var(--green); }
+.luup-btn b { font-size: 14px; font-weight: 700; }
+.luup-btn span { font-size: 11.5px; color: var(--muted); }

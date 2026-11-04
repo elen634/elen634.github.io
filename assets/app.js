@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r6 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r7 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -266,6 +266,21 @@
     } catch (e) { return CFG.rail.consumerKey || ''; }
   }
 
+  function askKey() {
+    var cur = odptKey();
+    var v = window.prompt(
+      'ODPT の Consumer Key を貼り付けてください。\n' +
+      'https://developer.odpt.org/ で無料登録すると発行されます。\n' +
+      '（このブラウザにのみ保存され、どこにも送信されません）', cur);
+    if (v === null) return;
+    try {
+      v = v.trim();
+      if (v) localStorage.setItem('odptKey', v);
+      else localStorage.removeItem('odptKey');
+    } catch (e) { alert('このブラウザでは保存できませんでした'); return; }
+    load();
+  }
+
   function railUrl(operator) {
     var R = CFG.rail;
     R = { publicBase: R.publicBase, keyedBase: R.keyedBase, consumerKey: odptKey() };
@@ -377,7 +392,15 @@
         });
       } else if (!g.available && g.url) {
         var d2 = el('p', 'line-detail');
-        if (!odptKey()) d2.appendChild(document.createTextNode('ODPTキー未設定のため未取得。'));
+        if (!odptKey()) {
+          d2.appendChild(document.createTextNode('ODPTキー未設定のため未取得。'));
+          var kb = el('button', 'keybtn', 'キーを設定');
+          kb.type = 'button';
+          kb.addEventListener('click', askKey);
+          d2.appendChild(document.createTextNode(' '));
+          d2.appendChild(kb);
+          d2.appendChild(document.createTextNode(' '));
+        }
         var a = el('a', null, '公式の運行情報 ›');
         a.href = g.url; a.target = '_blank'; a.rel = 'noopener';
         d2.appendChild(document.createTextNode(' '));

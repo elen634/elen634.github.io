@@ -139,16 +139,13 @@
   // 3d. ちぃばす時刻表（東京都オープンデータ CKAN）がブラウザから取れるか
   (function () {
     var done = row('ちぃばす時刻表 東京都オープンデータ');
-    jobs.push(get('https://catalog.data.metro.tokyo.lg.jp/api/3/action/package_show?id=t131032d0000000054')
+    /* ブラウザからは CORS で止まるので、Vercel のサーバー側経由で取る */
+    jobs.push(get('/api/chiibus?raw=1')
       .then(function (j) {
-        var rs = (j.result && j.result.resources) || [];
-        var shiba = rs.filter(function (r) {
-          return /芝浦港南/.test(r.name || '') && /品川/.test(r.name || '');
-        });
-        done(true, rs.length + '件中 芝浦港南/品川 ' + shiba.length + '件: ' +
-          shiba.slice(0, 4).map(function (r) { return r.name + ' => ' + r.url; }).join(' ## '));
+        if (j.error) { done(false, j.error); return; }
+        done(true, j.picked + ' / ' + j.bytes + 'B ## 先頭: ' + (j.head || []).slice(0, 12).join(' ## '));
       })
-      .catch(function (e) { done(false, e.message); }));
+      .catch(function (e) { done(false, 'サーバー関数に届かず: ' + e.message); }));
   })();
 
   // 3e. 都営バス 品99 の時刻表（ODPT・キーが要る）

@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r12 · 品99+ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r13 · 地点切替 · 品99+ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -259,44 +259,103 @@
   /* ================= 運行情報 ================= */
   /* ODPT の TrainInformation。api-public はキー不要。
      consumerKey があれば api.odpt.org 側を使い、取得できる事業者が増える。 */
-  /* 自宅の位置。設定ファイルの値は目安なので、端末側で上書きできる。 */
+  /* 地点。設定ファイルの値は目安なので、端末側で上書きできる。
+     天気はつねに home、シェアサイクルは選択中の地点を使う。 */
+  function overrides() {
+    try { return JSON.parse(localStorage.getItem('placeOverrides') || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+
+  function placeList() {
+    var ov = overrides();
+    return (CFG.places || []).map(function (p) {
+      var o = ov[p.id];
+      return {
+        id: p.id, label: p.label,
+        lat: o ? o.lat : p.lat, lon: o ? o.lon : p.lon,
+        custom: !!o,
+      };
+    });
+  }
+
+  function placeById(id) {
+    var l = placeList();
+    for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+    return l[0];
+  }
+
+  /* 天気と「自宅」基準の距離に使う地点 */
   function home() {
-    try {
-      var v = localStorage.getItem('homePos');
-      if (v) {
-        var o = JSON.parse(v);
-        if (isFinite(o.lat) && isFinite(o.lon)) return o;
-      }
-    } catch (e) {}
+    var h = placeById('home');
+    if (h && isFinite(h.lat) && isFinite(h.lon)) return h;
     return { lat: CFG.place.lat, lon: CFG.place.lon };
   }
 
-  function saveHome(lat, lon) {
-    try { localStorage.setItem('homePos', JSON.stringify({ lat: lat, lon: lon })); }
-    catch (e) { alert('このブラウザでは保存できませんでした'); return; }
+  function activeId() {
+    try { return localStorage.getItem('placeId') || 'home'; } catch (e) { return 'home'; }
+  }
+
+  /* シェアサイクルを探す基準地点。未設定の地点を選んでいたら自宅に戻す。 */
+  function portOrigin() {
+    var p = placeById(activeId());
+    if (p && isFinite(p.lat) && isFinite(p.lon)) return p;
+    return home();
+  }
+
+  function setActive(id) {
+    try { localStorage.setItem('placeId', id); } catch (e) {}
+    var p = placeById(id);
+    if (!isFinite(p.lat) || !isFinite(p.lon)) { useCurrentPosition(id); return; }
     load();
   }
 
-  function useCurrentPosition() {
-    if (!navigator.geolocation) { askHomeManually(); return; }
+  function savePlace(id, lat, lon) {
+    var ov = overrides();
+    ov[id] = { lat: lat, lon: lon };
+    try {
+      localStorage.setItem('placeOverrides', JSON.stringify(ov));
+      localStorage.setItem('placeId', id);
+    } catch (e) { alert('このブラウザでは保存できませんでした'); return; }
+    load();
+  }
+
+  function useCurrentPosition(id) {
+    id = id || activeId();
+    if (!navigator.geolocation) { askPlaceManually(id); return; }
     navigator.geolocation.getCurrentPosition(
-      function (pos) { saveHome(pos.coords.latitude, pos.coords.longitude); },
-      function () { alert('現在地を取得できませんでした。緯度経度を貼り付けてください。'); askHomeManually(); },
+      function (pos) { savePlace(id, pos.coords.latitude, pos.coords.longitude); },
+      function () { alert('現在地を取得できませんでした。緯度経度を貼り付けてください。'); askPlaceManually(id); },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }
 
-  function askHomeManually() {
-    var h = home();
+  function askPlaceManually(id) {
+    id = id || activeId();
+    var p = placeById(id);
+    var cur = (isFinite(p.lat) && isFinite(p.lon)) ? p.lat + ', ' + p.lon : '';
     var v = window.prompt(
-      '自宅の緯度経度を「35.6236, 139.7487」の形で貼り付けてください。\n' +
-      'Googleマップで建物を長押し（右クリック）すると数値が出ます。',
-      h.lat + ', ' + h.lon);
+      '「' + p.label + '」の緯度経度を「35.6236, 139.7487」の形で貼り付けてください。\n' +
+      'Googleマップで建物を長押し（右クリック）すると数値が出ます。', cur);
     if (v === null) return;
     var m = String(v).match(/(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)/);
     if (!m) { alert('読み取れませんでした'); return; }
-    saveHome(parseFloat(m[1]), parseFloat(m[2]));
+    savePlace(id, parseFloat(m[1]), parseFloat(m[2]));
   }
+
+  /* 旧版（homePos）で保存していた位置を引き継ぐ */
+  (function migrate() {
+    try {
+      var old = localStorage.getItem('homePos');
+      if (!old) return;
+      var o = JSON.parse(old);
+      var ov = overrides();
+      if (!ov.home && isFinite(o.lat) && isFinite(o.lon)) {
+        ov.home = { lat: o.lat, lon: o.lon };
+        localStorage.setItem('placeOverrides', JSON.stringify(ov));
+      }
+      localStorage.removeItem('homePos');
+    } catch (e) {}
+  })();
 
   function odptKey() {
     try {
@@ -779,7 +838,7 @@
   }
 
   function fetchProvider(pv) {
-    var B = CFG.bikeshare, H = home();
+    var B = CFG.bikeshare, H = portOrigin();
     return Promise.all([
       fetch(gbfs(pv.system, 'station_information'), { cache: 'no-store' }).then(function (r) { return r.json(); }),
       fetch(gbfs(pv.system, 'station_status'), { cache: 'no-store' }).then(function (r) { return r.json(); }),
@@ -806,7 +865,7 @@
     var W = CFG.bikeshare.walk;
     if (!W || !W.enabled || !ports.length) return Promise.resolve(null);
     var body = {
-      sources: [{ lat: home().lat, lon: home().lon }],
+      sources: [{ lat: portOrigin().lat, lon: portOrigin().lon }],
       targets: ports.map(function (p) { return { lat: p.lat, lon: p.lon }; }),
       costing: 'pedestrian',
       units: 'kilometers',
@@ -858,16 +917,27 @@
     card.hidden = false;
     var up = $('share-updated');
     up.innerHTML = '';
-    up.appendChild(document.createTextNode(pad(t.hh) + ':' + pad(t.mm) + ' 更新 '));
-    var gps = el('button', 'keybtn', '現在地から');
-    gps.type = 'button';
-    gps.addEventListener('click', useCurrentPosition);
-    up.appendChild(gps);
-    up.appendChild(document.createTextNode(' '));
-    var man = el('button', 'keybtn', '座標を入力');
-    man.type = 'button';
-    man.addEventListener('click', askHomeManually);
-    up.appendChild(man);
+    up.appendChild(el('span', null, pad(t.hh) + ':' + pad(t.mm) + ' 更新'));
+
+    /* 基準地点の切り替え */
+    var cur = activeId();
+    var picker = el('div', 'dirs place-picker');
+    placeList().forEach(function (pl) {
+      var btn = el('button', null, pl.label);
+      btn.type = 'button';
+      btn.setAttribute('aria-pressed', String(pl.id === cur));
+      btn.title = pl.id === 'gps' ? '端末の位置情報を使います'
+        : (isFinite(pl.lat) ? pl.lat.toFixed(5) + ', ' + pl.lon.toFixed(5) : '未設定');
+      btn.addEventListener('click', function () { setActive(pl.id); });
+      picker.appendChild(btn);
+    });
+    up.appendChild(picker);
+
+    var fix = el('button', 'keybtn', '位置を直す');
+    fix.type = 'button';
+    fix.title = '選択中の地点の緯度経度を設定します';
+    fix.addEventListener('click', function () { askPlaceManually(activeId()); });
+    up.appendChild(fix);
 
     var box = $('ports');
     box.innerHTML = '';
@@ -899,12 +969,11 @@
 
     var note = $('port-note');
     note.innerHTML = '';
-    var custom = false;
-    try { custom = !!localStorage.getItem('homePos'); } catch (e) {}
-    if (!custom) {
-      var warn = el('div', 'port-warn',
-        '自宅の位置が未設定です。設定前の座標は目安のため、実際より遠い／近いポートが出ることがあります。右上の「現在地から」で直ります。');
-      note.appendChild(warn);
+    var act = placeById(activeId());
+    if (!act.custom && act.id !== 'gps') {
+      note.appendChild(el('div', 'port-warn',
+        '「' + act.label + '」の座標は目安のままです。実際とずれていると、対岸など遠いポートが最寄りとして出ます。' +
+        'その場所で「現在地から」を押すか、「位置を直す」で設定してください。'));
     }
     if (CFG.bikeshare.luupUrl) {
       var a = el('a', 'luup-btn');

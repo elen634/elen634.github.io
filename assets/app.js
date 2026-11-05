@@ -9,7 +9,7 @@
   var TZ = 'Asia/Tokyo';
   var REFRESH_MS = 5 * 60 * 1000;
 
-  var BUILD = 'r13 · 地点切替 · 品99+ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
+  var BUILD = 'r14 · 住所で地点設定 · 品99+ちぃばす実装 · 運行情報=ODPT(0件は未取得扱い) · 徒歩=実経路 · シェア=ドコモ+HELLO';
 
   var $ = function (id) { return document.getElementById(id); };
   var el = function (tag, cls, text) {
@@ -273,9 +273,51 @@
       return {
         id: p.id, label: p.label,
         lat: o ? o.lat : p.lat, lon: o ? o.lon : p.lon,
-        custom: !!o,
+        custom: !!o, from: o && o.from, address: p.address,
       };
     });
+  }
+
+  /* 住所から座標を引いて保存する。国土地理院の検索をサーバー関数経由で使う。 */
+  function geocode(q) {
+    return fetch('/api/geocode?q=' + encodeURIComponent(q), { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('geocode ' + r.status); return r.json(); })
+      .then(function (j) {
+        if (j.error) throw new Error(j.error);
+        if (!j.results || !j.results.length) throw new Error('住所が見つかりません');
+        return j.results[0];
+      });
+  }
+
+  /* 座標が無く住所だけある地点を、起動時に一度だけ解決する */
+  function resolvePlaces() {
+    var ov = overrides();
+    var todo = (CFG.places || []).filter(function (p) {
+      return p.address && !ov[p.id] && !isFinite(p.lat);
+    });
+    if (!todo.length) return Promise.resolve(false);
+    return Promise.all(todo.map(function (p) {
+      return geocode(p.address)
+        .then(function (hit) { return { id: p.id, lat: hit.lat, lon: hit.lon, title: hit.title }; })
+        .catch(function (e) { console.warn(p.label, e); return null; });
+    })).then(function (hits) {
+      var got = hits.filter(Boolean);
+      if (!got.length) return false;
+      var o = overrides();
+      got.forEach(function (h) { o[h.id] = { lat: h.lat, lon: h.lon, from: h.title }; });
+      try { localStorage.setItem('placeOverrides', JSON.stringify(o)); } catch (e) { return false; }
+      return true;
+    });
+  }
+
+  function askPlaceByAddress(id) {
+    var p = placeById(id);
+    var v = window.prompt('「' + p.label + '」の住所を入力してください。',
+      (CFG.places.filter(function (x) { return x.id === id; })[0] || {}).address || '');
+    if (v === null || !v.trim()) return;
+    geocode(v.trim()).then(function (hit) {
+      savePlace(id, hit.lat, hit.lon, hit.title);
+    }).catch(function (e) { alert('座標を取得できませんでした: ' + e.message); });
   }
 
   function placeById(id) {
@@ -309,9 +351,9 @@
     load();
   }
 
-  function savePlace(id, lat, lon) {
+  function savePlace(id, lat, lon, from) {
     var ov = overrides();
-    ov[id] = { lat: lat, lon: lon };
+    ov[id] = { lat: lat, lon: lon, from: from || '手動設定' };
     try {
       localStorage.setItem('placeOverrides', JSON.stringify(ov));
       localStorage.setItem('placeId', id);
@@ -933,9 +975,14 @@
     });
     up.appendChild(picker);
 
-    var fix = el('button', 'keybtn', '位置を直す');
+    if (activeId() !== 'gps') {
+      var ad = el('button', 'keybtn', '住所で設定');
+      ad.type = 'button';
+      ad.addEventListener('click', function () { askPlaceByAddress(activeId()); });
+      up.appendChild(ad);
+    }
+    var fix = el('button', 'keybtn', '座標で設定');
     fix.type = 'button';
-    fix.title = '選択中の地点の緯度経度を設定します';
     fix.addEventListener('click', function () { askPlaceManually(activeId()); });
     up.appendChild(fix);
 
@@ -970,6 +1017,9 @@
     var note = $('port-note');
     note.innerHTML = '';
     var act = placeById(activeId());
+    if (act.custom && act.from) {
+      note.appendChild(el('div', 'port-src', '基準: ' + act.label + '（' + act.from + '）'));
+    }
     if (!act.custom && act.id !== 'gps') {
       note.appendChild(el('div', 'port-warn',
         '「' + act.label + '」の座標は目安のままです。実際とずれていると、対岸など遠いポートが最寄りとして出ます。' +
@@ -1133,7 +1183,7 @@
   });
 
   paintClock();
-  load();
+  resolvePlaces().then(function (changed) { load(); });
 
   var lastMinute = -1;
   setInterval(function () {

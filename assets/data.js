@@ -18,8 +18,8 @@ window.DASHBOARD_CONFIG = {
      「現在地から」か「座標を入力」を押すと上書きされ、端末に保存されます。
      天気はつねに home の地点を使います。 */
   places: [
-    { id: 'home',    label: 'リビオタワー品川', lat: 35.6236, lon: 139.7487 },
-    { id: 'station', label: '品川駅港南口',     lat: 35.6279, lon: 139.7410 },
+    { id: 'home',    label: 'リビオタワー品川', address: '東京都港区港南3-4-17' },
+    { id: 'station', label: '品川駅港南口',     address: '東京都港区港南2-1-78' },
     { id: 'gps',     label: '現在地' },
   ],
 
